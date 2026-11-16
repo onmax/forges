@@ -1091,6 +1091,42 @@ describe('github repository and thread metadata', () => {
     expect(calls.map(call => call.url)).not.toContain('https://api.github.com/repos/acme/widgets/branches/release/v1/protection')
   })
 
+  it('reads no rulesets for a private repository on a plan without them', async () => {
+    const unprotected = {
+      status: 200,
+      body: {
+        name: 'main',
+        commit: {
+          sha: 'a'.repeat(40),
+        },
+        protected: false,
+        protection: {
+          enabled: false,
+          required_status_checks: { enforcement_level: 'off', contexts: [], checks: [] },
+        },
+      },
+    }
+    const { provider } = tokenProvider({
+      'GET https://api.github.com/repos/acme/widgets/branches/main': unprotected,
+      'GET https://api.github.com/repos/acme/widgets/rules/branches/main?per_page=100': {
+        status: 403,
+        body: { message: 'Upgrade to GitHub Pro or make this repository public to enable this feature.', status: '403' },
+      },
+    })
+
+    expect(await provider.repos.branchRules(repo, 'main')).toMatchObject({ requiredChecks: [], requiredApprovals: 0 })
+
+    const { provider: denied } = tokenProvider({
+      'GET https://api.github.com/repos/acme/widgets/branches/main': unprotected,
+      'GET https://api.github.com/repos/acme/widgets/rules/branches/main?per_page=100': {
+        status: 403,
+        body: { message: 'Resource not accessible by integration' },
+      },
+    })
+
+    await expect(denied.repos.branchRules(repo, 'main')).rejects.toBeInstanceOf(InsufficientScopeError)
+  })
+
   it('adds collaborators with the permission names GitHub accepts', async () => {
     const url = 'https://api.github.com/repos/acme/widgets/collaborators/octocat'
     const { fetch, calls } = fixtureFetch('github', {

@@ -2729,7 +2729,13 @@ function setupGitHub(ctx: GitHubContext, profile: GitHubProfile): GitHubSpec {
           Array.fromAsync(fetcher.items<GitHubBranchRule>(`${repoPath(repo)}/rules/${branchPath}`, {
             query: { per_page: 100 },
             signal: options?.signal,
-          })),
+          })).catch((error: unknown) => {
+            // A private repository on a plan without rulesets can't have any, and GitHub refuses to list them.
+            if (error instanceof ForgeApiError && error.status === 403 && /make this repository public to enable this feature/i.test(error.body)) {
+              return []
+            }
+            throw error
+          }),
         ])
         const warnings: ForgeWarning[] = []
         let protection: GitHubBranchProtection | undefined
