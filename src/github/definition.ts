@@ -1916,10 +1916,16 @@ function setupGitHub(ctx: GitHubContext, profile: GitHubProfile): GitHubSpec {
       const bytes = new Uint8Array(await response.arrayBuffer())
       return toFileContent(bytes, { path, size: bytes.byteLength }, fileOptions, context)
     }
-    const { data } = await fetcher.json<GitHubContentFile>(`${repoPath(repo)}/contents/${encoded}`, {
+    const { data } = await fetcher.json<GitHubContentFile | GitHubContentFile[]>(`${repoPath(repo)}/contents/${encoded}`, {
       query: { ref: fileOptions.ref },
       signal: fileOptions.signal,
     })
+    // The contents API lists a directory, and answers a submodule with its commit, which has no blob to read.
+    if (Array.isArray(data) || data.type === 'submodule') {
+      throw new NotFoundError(`${path} is a ${Array.isArray(data)
+        ? 'directory'
+        : 'submodule'}, not a file`, 404, '', context)
+    }
     const file = {
       path: data.path,
       sha: data.sha,

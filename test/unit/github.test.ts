@@ -2761,6 +2761,30 @@ describe('github contents', () => {
     await expect(provider.contents.getFile(repo, 'assets/large.bin', { as: 'text' })).rejects.toBeInstanceOf(ContentNotTextError)
   })
 
+  it('rejects a directory or a submodule without reading a blob', async () => {
+    const { provider, calls } = tokenProvider({
+      'GET https://api.github.com/repos/acme/widgets/contents/docs?ref=main': contentsListing('docs/guide.md', 'docs/api/'),
+      'GET https://api.github.com/repos/acme/widgets/contents/vendor/lib?ref=main': {
+        status: 200,
+        body: {
+          type: 'submodule',
+          name: 'lib',
+          path: 'vendor/lib',
+          sha,
+          size: 0,
+        },
+      },
+    })
+
+    const directory = provider.contents.getFile(repo, 'docs', { ref: 'main' })
+    await expect(directory).rejects.toBeInstanceOf(NotFoundError)
+    await expect(directory).rejects.toThrow('docs is a directory, not a file')
+    const submodule = provider.contents.getFile(repo, 'vendor/lib', { ref: 'main' })
+    await expect(submodule).rejects.toBeInstanceOf(NotFoundError)
+    await expect(submodule).rejects.toThrow('vendor/lib is a submodule, not a file')
+    expect(calls.map(call => call.url)).not.toContainEqual(expect.stringContaining('/git/blobs/'))
+  })
+
   it('warns when the tree is truncated', async () => {
     const { provider } = tokenProvider()
 
